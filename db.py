@@ -336,6 +336,46 @@ def get_stats(db_path: str, user_id: int) -> dict[str, int]:
     }
 
 
+def get_admin_stats(db_path: str) -> dict[str, int]:
+    with get_conn(db_path) as conn:
+        users = conn.execute(
+            _sql(
+                db_path,
+                """
+                SELECT
+                    COUNT(*) AS users_total,
+                    SUM(CASE WHEN onboarding_complete = 1 THEN 1 ELSE 0 END) AS users_onboarded,
+                    SUM(CASE WHEN paused = 1 THEN 1 ELSE 0 END) AS users_paused
+                FROM users
+                """,
+            )
+        ).fetchone()
+        days = conn.execute(
+            _sql(
+                db_path,
+                """
+                SELECT
+                    SUM(CASE WHEN status IN ('full', 'partial', 'none') THEN 1 ELSE 0 END) AS days_total,
+                    SUM(CASE WHEN status = 'full' THEN 1 ELSE 0 END) AS days_full,
+                    SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) AS days_partial,
+                    SUM(CASE WHEN status = 'none' THEN 1 ELSE 0 END) AS days_none,
+                    SUM(CASE WHEN status IS NULL THEN 1 ELSE 0 END) AS days_unmarked
+                FROM days
+                """,
+            )
+        ).fetchone()
+    return {
+        "users_total": int(users["users_total"] or 0),
+        "users_onboarded": int(users["users_onboarded"] or 0),
+        "users_paused": int(users["users_paused"] or 0),
+        "days_total": int(days["days_total"] or 0),
+        "days_full": int(days["days_full"] or 0),
+        "days_partial": int(days["days_partial"] or 0),
+        "days_none": int(days["days_none"] or 0),
+        "days_unmarked": int(days["days_unmarked"] or 0),
+    }
+
+
 def set_pause(db_path: str, user_id: int, paused: bool) -> None:
     upsert_user(db_path, user_id, paused=1 if paused else 0)
 

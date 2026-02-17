@@ -60,6 +60,26 @@ TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 OTHER_TIMEZONE_OPTIONS = COPY["timezone_other_options"]
 
 
+def admin_ids() -> set[int]:
+    raw = os.getenv("ADMIN_USER_ID", "").strip()
+    if not raw:
+        return set()
+    out: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.add(int(part))
+        except ValueError:
+            continue
+    return out
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in admin_ids()
+
+
 def build_menu_rows(paused: bool) -> list[list[str]]:
     pause_key = "resume" if paused else "pause"
     return [[COPY["buttons"]["time_change"]], [COPY["buttons"][pause_key]]]
@@ -364,6 +384,15 @@ async def restart_onboarding_cmd(update: Update, context: ContextTypes.DEFAULT_T
     db.upsert_user(DB_PATH, user_id)
     await update.message.reply_text(COPY["common"]["restart_started"], reply_markup=ReplyKeyboardRemove())
     return await send_onboarding_start(update.message, user_id)
+
+
+async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text(COPY["admin"]["forbidden"])
+        return
+    stats = db.get_admin_stats(DB_PATH)
+    await update.message.reply_text(COPY["admin"]["stats"].format(**stats))
 
 
 async def onb_start_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1257,6 +1286,7 @@ def build_app(token: str) -> Application:
     app.add_handler(onboarding_conv)
     app.add_handler(test_conv)
     app.add_handler(change_time_conv)
+    app.add_handler(CommandHandler("admin_stats", admin_stats_cmd))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"Пауза"), pause_handler))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"Возобнов"), resume_handler))
     app.add_handler(CallbackQueryHandler(thanks_callback, pattern=r"^presence:thanks$"))
