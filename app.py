@@ -81,5 +81,19 @@ def cron_tick():
     if not _check_cron_secret():
         return jsonify({"ok": False, "error": "forbidden"}), 403
 
-    asyncio.run(run_tick_once())
-    return jsonify({"ok": True})
+    try:
+        asyncio.run(run_tick_once())
+        return jsonify({"ok": True})
+    except Exception as e:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": type(e).__name__,
+                    "message": str(e),
+                    "has_bot_token": bool(os.getenv("BOT_TOKEN")),
+                    "has_database_url": bool(os.getenv("DATABASE_URL") or os.getenv("DB_PATH")),
+                }
+            ),
+            500,
+        )
