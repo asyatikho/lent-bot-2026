@@ -462,6 +462,7 @@ async def onb_reflection_save(update: Update, context: ContextTypes.DEFAULT_TYPE
         reflection_text=context.user_data.get("reflection_candidate"),
         reflection_skipped=0,
     )
+    await query.message.reply_text(COPY["onboarding"]["reflection_saved"])
     return await send_timezone_step(query.message)
 
 
@@ -1246,6 +1247,7 @@ async def test_reflection_confirm_handler(update: Update, context: ContextTypes.
     context.user_data["test_reflection_text"] = context.user_data.get("test_reflection_candidate", "").strip()
     context.user_data["test_waiting_reflection"] = False
     context.user_data["test_waiting_reflection_confirm"] = False
+    await query.message.reply_text(COPY["onboarding"]["reflection_saved"])
     context.user_data["test_index"] += 1
     await send_test_step(query.message, context)
     steps = context.user_data["test_steps"]
