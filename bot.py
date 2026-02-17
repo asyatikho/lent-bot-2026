@@ -80,6 +80,31 @@ def is_admin(user_id: int) -> bool:
     return user_id in admin_ids()
 
 
+def _onb_draft_key(user_id: int) -> str:
+    return f"onboarding_draft:{user_id}"
+
+
+def get_onb_draft(user_id: int) -> dict:
+    raw = db.get_runtime_state(DB_PATH, _onb_draft_key(user_id))
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def set_onb_draft(user_id: int, **fields) -> None:
+    draft = get_onb_draft(user_id)
+    draft.update(fields)
+    db.set_runtime_state(DB_PATH, _onb_draft_key(user_id), json.dumps(draft, ensure_ascii=False))
+
+
+def clear_onb_draft(user_id: int) -> None:
+    db.set_runtime_state(DB_PATH, _onb_draft_key(user_id), "{}")
+
+
 def build_menu_rows(paused: bool) -> list[list[str]]:
     pause_key = "resume" if paused else "pause"
     return [[COPY["buttons"]["time_change"]], [COPY["buttons"][pause_key]]]
@@ -371,6 +396,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
 
     db.upsert_user(DB_PATH, user_id)
+    clear_onb_draft(user_id)
     return await send_onboarding_start(update.message, user_id)
 
 
@@ -382,6 +408,7 @@ async def restart_onboarding_cmd(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     db.delete_user(DB_PATH, user_id)
     db.upsert_user(DB_PATH, user_id)
+    clear_onb_draft(user_id)
     await update.message.reply_text(COPY["common"]["restart_started"], reply_markup=ReplyKeyboardRemove())
     return await send_onboarding_start(update.message, user_id)
 
@@ -398,6 +425,7 @@ async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def onb_start_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+    clear_onb_draft(update.effective_user.id)
     await query.message.reply_text(COPY["onboarding"]["screen_2"])
     return await send_reflection_prompt(query.message)
 
@@ -409,6 +437,7 @@ async def onb_reflection_input(update: Update, context: ContextTypes.DEFAULT_TYP
         return ONB_REFLECTION_INPUT
 
     context.user_data["reflection_candidate"] = text
+    set_onb_draft(update.effective_user.id, reflection_candidate=text)
     confirm_text = COPY["onboarding"]["reflection_confirm"].format(reflection_text=text)
     await update.message.reply_text(confirm_text, reply_markup=reflection_confirm_markup())
     return ONB_REFLECTION_CONFIRM
@@ -419,6 +448,7 @@ async def onb_reflection_skip(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     context.user_data["reflection_text"] = None
     context.user_data["reflection_skipped"] = 1
+    set_onb_draft(update.effective_user.id, reflection_text=None, reflection_skipped=1)
     return await send_timezone_step(query.message)
 
 
@@ -427,6 +457,11 @@ async def onb_reflection_save(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     context.user_data["reflection_text"] = context.user_data.get("reflection_candidate")
     context.user_data["reflection_skipped"] = 0
+    set_onb_draft(
+        update.effective_user.id,
+        reflection_text=context.user_data.get("reflection_candidate"),
+        reflection_skipped=0,
+    )
     return await send_timezone_step(query.message)
 
 
@@ -466,6 +501,7 @@ async def onb_timezone_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     context.user_data["timezone"] = entry["tz"]
     context.user_data["timezone_label"] = entry["label"]
+    set_onb_draft(update.effective_user.id, timezone=entry["tz"], timezone_label=entry["label"])
     return await send_timezone_confirm_step(query.message, entry["label"])
 
 
@@ -489,6 +525,7 @@ async def onb_timezone_custom_pick(update: Update, context: ContextTypes.DEFAULT
 
         context.user_data["timezone"] = tz
         context.user_data["timezone_label"] = chosen["label"]
+        set_onb_draft(update.effective_user.id, timezone=tz, timezone_label=chosen["label"])
         return await send_timezone_confirm_step(query.message, chosen["label"])
 
     await query.message.reply_text(COPY["errors"]["timezone_unknown"])
@@ -501,6 +538,7 @@ async def onb_set_morning(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(COPY["errors"]["invalid_time"])
         return ONB_MORNING
     context.user_data["morning_time"] = value
+    set_onb_draft(update.effective_user.id, morning_time=value)
     await update.message.reply_text(COPY["onboarding"]["morning_saved"])
     await update.message.reply_text(COPY["onboarding"]["screen_7"])
     return ONB_EVENING
@@ -512,12 +550,18 @@ async def onb_set_evening(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(COPY["errors"]["invalid_time"])
         return ONB_EVENING
 
-    if not context.user_data.get("timezone") or not context.user_data.get("morning_time"):
+    draft = get_onb_draft(update.effective_user.id)
+    tz_val = context.user_data.get("timezone") or draft.get("timezone")
+    morning_val = context.user_data.get("morning_time") or draft.get("morning_time")
+    reflection_text = context.user_data.get("reflection_text", draft.get("reflection_text"))
+    reflection_skipped = int(context.user_data.get("reflection_skipped", draft.get("reflection_skipped", 1)))
+
+    if not tz_val or not morning_val:
         await update.message.reply_text(COPY["errors"]["wrong_input"])
         return await send_timezone_step(update.message)
 
     user_id = update.effective_user.id
-    tz = context.user_data["timezone"]
+    tz = tz_val
     local_today = datetime.now(timezone.utc).astimezone(ZoneInfo(tz)).date()
 
     if local_today > END_DATE:
@@ -529,15 +573,15 @@ async def onb_set_evening(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         DB_PATH,
         user_id,
         timezone=tz,
-        morning_time=context.user_data["morning_time"],
+        morning_time=morning_val,
         evening_time=value,
         morning_time_effective_from=local_today.isoformat(),
         evening_time_effective_from=local_today.isoformat(),
         onboarding_complete=1,
         paused=0,
         start_date=start_date.isoformat(),
-        reflection_text=context.user_data.get("reflection_text"),
-        reflection_skipped=int(context.user_data.get("reflection_skipped", 1)),
+        reflection_text=reflection_text,
+        reflection_skipped=reflection_skipped,
     )
 
     if START_DATE <= local_today <= END_DATE:
@@ -559,6 +603,7 @@ async def onb_set_evening(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(finish_text, reply_markup=menu_markup_for_user(user))
     local_now = datetime.now(timezone.utc).astimezone(ZoneInfo(tz))
     await send_onboarding_catchup_messages(update, user, local_now)
+    clear_onb_draft(user_id)
     return ConversationHandler.END
 
 
