@@ -234,18 +234,14 @@ async def run_tick_once(bot: Bot | None = None) -> None:
     db.init_db(DB_PATH)
     local_bot = bot or Bot(token=token)
     try:
-        try:
-            users = db.list_active_users(DB_PATH)
-            for user in users:
-                try:
-                    await process_user(local_bot, user)
-                except Exception:
-                    LOGGER.exception("user loop failed: %s", user.get("user_id"))
-        except Exception:
-            LOGGER.exception("worker loop failed")
-    finally:
-        if bot is None:
-            await local_bot.session.close()
+        users = db.list_active_users(DB_PATH)
+        for user in users:
+            try:
+                await process_user(local_bot, user)
+            except Exception:
+                LOGGER.exception("user loop failed: %s", user.get("user_id"))
+    except Exception:
+        LOGGER.exception("worker loop failed")
 
 
 if __name__ == "__main__":
