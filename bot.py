@@ -512,6 +512,10 @@ async def onb_set_evening(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(COPY["errors"]["invalid_time"])
         return ONB_EVENING
 
+    if not context.user_data.get("timezone") or not context.user_data.get("morning_time"):
+        await update.message.reply_text(COPY["errors"]["wrong_input"])
+        return await send_timezone_step(update.message)
+
     user_id = update.effective_user.id
     tz = context.user_data["timezone"]
     local_today = datetime.now(timezone.utc).astimezone(ZoneInfo(tz)).date()

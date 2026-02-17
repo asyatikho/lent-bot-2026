@@ -8,7 +8,10 @@ import db
 
 class DbPersistence(BasePersistence):
     def __init__(self, db_path: str):
-        super().__init__(store_data=PersistenceInput(user_data=True, chat_data=True, bot_data=True, callback_data=True))
+        super().__init__(
+            store_data=PersistenceInput(user_data=True, chat_data=True, bot_data=True, callback_data=True),
+            update_interval=0,
+        )
         self.db_path = db_path
 
     def _load_json(self, key: str, default: Any):
