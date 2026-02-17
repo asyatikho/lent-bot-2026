@@ -1297,9 +1297,13 @@ def build_app(token: str) -> Application:
             ONB_MORNING: [MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_morning)],
             ONB_EVENING: [MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_evening)],
         },
-        fallbacks=[],
+        fallbacks=[
+            CommandHandler("start", start_cmd),
+            CommandHandler("restart_onboarding", restart_onboarding_cmd),
+        ],
         per_chat=True,
         per_user=True,
+        allow_reentry=True,
     )
 
     change_time_conv = ConversationHandler(
