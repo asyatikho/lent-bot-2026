@@ -21,5 +21,5 @@ def _authorized() -> bool:
 def tick():
     if not _authorized():
         return jsonify({"ok": False, "error": "forbidden"}), 403
-    asyncio.run(run_tick_once())
-    return jsonify({"ok": True})
+    result = asyncio.run(run_tick_once())
+    return jsonify({"ok": True, **result})

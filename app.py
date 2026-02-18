@@ -93,8 +93,8 @@ def cron_tick():
         return jsonify({"ok": False, "error": "forbidden"}), 403
 
     try:
-        asyncio.run(run_tick_once())
-        return jsonify({"ok": True})
+        result = asyncio.run(run_tick_once())
+        return jsonify({"ok": True, **result})
     except Exception as e:
         return (
             jsonify(

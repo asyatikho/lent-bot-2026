@@ -226,22 +226,41 @@ async def loop_worker() -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def run_tick_once(bot: Bot | None = None) -> None:
+async def run_tick_once(bot: Bot | None = None) -> dict:
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is required")
 
     db.init_db(DB_PATH)
     local_bot = bot or Bot(token=token)
+    users_total = 0
+    users_ok = 0
+    user_errors: list[dict] = []
     try:
         users = db.list_active_users(DB_PATH)
+        users_total = len(users)
         for user in users:
             try:
                 await process_user(local_bot, user)
+                users_ok += 1
             except Exception:
                 LOGGER.exception("user loop failed: %s", user.get("user_id"))
+                user_errors.append(
+                    {
+                        "user_id": user.get("user_id"),
+                        "error": "user_loop_failed",
+                    }
+                )
     except Exception:
         LOGGER.exception("worker loop failed")
+        raise
+
+    return {
+        "users_total": users_total,
+        "users_ok": users_ok,
+        "users_failed": len(user_errors),
+        "errors": user_errors[:20],
+    }
 
 
 if __name__ == "__main__":
