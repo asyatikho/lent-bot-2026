@@ -105,6 +105,53 @@ def clear_onb_draft(user_id: int) -> None:
     db.set_runtime_state(DB_PATH, _onb_draft_key(user_id), "{}")
 
 
+def get_onboarding_state_for_user(user_id: int) -> int | None:
+    raw = db.get_runtime_state(DB_PATH, "conv:onboarding_conv")
+    if not raw:
+        return None
+    try:
+        rows = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(rows, list):
+        return None
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = row.get("key")
+        if not isinstance(key, list):
+            continue
+        try:
+            key_ints = [int(x) for x in key]
+        except Exception:
+            continue
+        if user_id not in key_ints:
+            continue
+        state = row.get("state")
+        try:
+            return int(state)
+        except Exception:
+            return None
+    return None
+
+
+def resolve_timezone_label_from_draft(draft: dict) -> str | None:
+    label = draft.get("timezone_label")
+    if label:
+        return str(label)
+    tz = draft.get("timezone")
+    if not tz:
+        return None
+    for item in COPY["timezone_options"]:
+        if item.get("tz") == tz:
+            return item.get("label")
+    for item in OTHER_TIMEZONE_OPTIONS:
+        if item.get("tz") == tz:
+            return item.get("label")
+    return str(tz)
+
+
 def build_menu_rows(paused: bool) -> list[list[str]]:
     pause_key = "resume" if paused else "pause"
     return [[COPY["buttons"]["time_change"]], [COPY["buttons"][pause_key]]]
@@ -439,6 +486,92 @@ async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         marks_distribution_block = COPY["admin"]["marks_distribution_empty"]
     stats["marks_distribution_block"] = marks_distribution_block
     await update.message.reply_text(COPY["admin"]["stats"].format(**stats))
+
+
+async def admin_nudge_onboarding_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text(COPY["admin"]["forbidden"])
+        return
+
+    targets = db.list_onboarding_incomplete_users(DB_PATH)
+    sent = 0
+    failed = 0
+    for row in targets:
+        try:
+            target_user_id = int(row["user_id"])
+            state = get_onboarding_state_for_user(target_user_id)
+            draft = get_onb_draft(target_user_id)
+
+            if state == ONB_START_GATE:
+                kb = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(COPY["buttons"]["start"], callback_data="onb:start")]]
+                )
+                await context.bot.send_message(chat_id=target_user_id, text=COPY["onboarding"]["screen_1"], reply_markup=kb)
+            elif state == ONB_REFLECTION_INPUT:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=COPY["onboarding"]["screen_3"],
+                    reply_markup=reflection_prompt_markup(),
+                )
+            elif state == ONB_REFLECTION_CONFIRM:
+                reflection_text = (draft.get("reflection_candidate") or "").strip()
+                if reflection_text:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=COPY["onboarding"]["reflection_confirm"].format(reflection_text=reflection_text),
+                        reply_markup=reflection_confirm_markup(),
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=COPY["onboarding"]["screen_3"],
+                        reply_markup=reflection_prompt_markup(),
+                    )
+            elif state == ONB_TIMEZONE:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=COPY["onboarding"]["screen_4"],
+                    reply_markup=timezone_markup(),
+                )
+            elif state == ONB_TIMEZONE_CUSTOM:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=COPY["onboarding"]["screen_4"],
+                    reply_markup=other_timezone_markup(),
+                )
+            elif state == ONB_TIMEZONE_CONFIRM:
+                tz_label = resolve_timezone_label_from_draft(draft)
+                if tz_label:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=COPY["onboarding"]["timezone_confirm"].format(timezone_label=tz_label),
+                        reply_markup=timezone_confirm_markup(),
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=COPY["onboarding"]["screen_4"],
+                        reply_markup=timezone_markup(),
+                    )
+            elif state == ONB_MORNING:
+                await context.bot.send_message(chat_id=target_user_id, text=COPY["onboarding"]["screen_5"])
+                await context.bot.send_message(chat_id=target_user_id, text=COPY["onboarding"]["screen_6"])
+            elif state == ONB_EVENING:
+                await context.bot.send_message(chat_id=target_user_id, text=COPY["onboarding"]["screen_7"])
+            else:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=COPY["onboarding"]["screen_4"],
+                    reply_markup=timezone_markup(),
+                )
+            sent += 1
+        except Exception:
+            failed += 1
+
+    await update.message.reply_text(
+        COPY["admin"]["nudge_result"].format(targets=len(targets), sent=sent, failed=failed)
+    )
 
 
 async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1456,6 +1589,7 @@ def build_app(token: str) -> Application:
     app.add_handler(test_conv)
     app.add_handler(change_time_conv)
     app.add_handler(CommandHandler("admin_stats", admin_stats_cmd))
+    app.add_handler(CommandHandler("admin_nudge_onboarding", admin_nudge_onboarding_cmd))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"Пауза"), pause_handler))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"Возобнов"), resume_handler))
     app.add_handler(CallbackQueryHandler(thanks_callback, pattern=r"^presence:thanks$"))
