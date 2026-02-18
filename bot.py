@@ -613,7 +613,30 @@ async def onb_wrong_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await send_onboarding_start(update.message, update.effective_user.id)
 
 
+async def try_handle_time_in_stale_onboarding_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int | None:
+    """Accept HH:MM even if conversation state lagged on serverless runtime."""
+    value = (update.message.text or "").strip()
+    if not TIME_RE.match(value):
+        return None
+
+    draft = get_onb_draft(update.effective_user.id)
+    tz_known = bool(context.user_data.get("timezone") or draft.get("timezone"))
+    morning_known = bool(context.user_data.get("morning_time") or draft.get("morning_time"))
+    if not tz_known:
+        return None
+
+    if not morning_known:
+        return await onb_set_morning(update, context)
+    return await onb_set_evening(update, context)
+
+
 async def onb_wrong_reflection_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    time_handled_state = await try_handle_time_in_stale_onboarding_state(update, context)
+    if time_handled_state is not None:
+        return time_handled_state
+
     text = context.user_data.get("reflection_candidate", "")
     await update.message.reply_text(COPY["errors"]["wrong_input"])
     confirm_text = COPY["onboarding"]["reflection_confirm"].format(reflection_text=text)
@@ -622,6 +645,10 @@ async def onb_wrong_reflection_confirm(update: Update, context: ContextTypes.DEF
 
 
 async def onb_wrong_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    time_handled_state = await try_handle_time_in_stale_onboarding_state(update, context)
+    if time_handled_state is not None:
+        return time_handled_state
+
     await update.message.reply_text(COPY["errors"]["wrong_input"])
     return await send_timezone_step(update.message)
 
@@ -641,6 +668,10 @@ async def onb_timezone_confirm_edit(update: Update, context: ContextTypes.DEFAUL
 
 
 async def onb_wrong_timezone_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    time_handled_state = await try_handle_time_in_stale_onboarding_state(update, context)
+    if time_handled_state is not None:
+        return time_handled_state
+
     await update.message.reply_text(COPY["errors"]["wrong_input"])
     label = context.user_data.get("timezone_label") or context.user_data.get("timezone") or "—"
     return await send_timezone_confirm_step(update.message, label)
@@ -1306,8 +1337,20 @@ def build_app(token: str) -> Application:
                 CallbackQueryHandler(onb_timezone_pick, pattern=r"^tz:"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, onb_wrong_timezone),
             ],
-            ONB_MORNING: [MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_morning)],
-            ONB_EVENING: [MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_evening)],
+            ONB_MORNING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_morning),
+                CallbackQueryHandler(onb_timezone_pick, pattern=r"^tz:"),
+                CallbackQueryHandler(onb_timezone_custom_pick, pattern=r"^tzother:"),
+                CallbackQueryHandler(onb_timezone_confirm_save, pattern=r"^onb:tz_save$"),
+                CallbackQueryHandler(onb_timezone_confirm_edit, pattern=r"^onb:tz_edit$"),
+            ],
+            ONB_EVENING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, onb_set_evening),
+                CallbackQueryHandler(onb_timezone_pick, pattern=r"^tz:"),
+                CallbackQueryHandler(onb_timezone_custom_pick, pattern=r"^tzother:"),
+                CallbackQueryHandler(onb_timezone_confirm_save, pattern=r"^onb:tz_save$"),
+                CallbackQueryHandler(onb_timezone_confirm_edit, pattern=r"^onb:tz_edit$"),
+            ],
         },
         fallbacks=[
             CommandHandler("start", start_cmd),
