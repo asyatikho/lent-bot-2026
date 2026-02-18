@@ -1275,11 +1275,21 @@ def build_app(token: str) -> Application:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, onb_reflection_input),
                 CallbackQueryHandler(onb_reflection_skip, pattern=r"^onb:skip$"),
                 CallbackQueryHandler(onb_reflection_back_to_welcome, pattern=r"^onb:back_to_welcome$"),
+                # Serverless safety: if state persistence lags, still accept timezone callbacks.
+                CallbackQueryHandler(onb_timezone_pick, pattern=r"^tz:"),
+                CallbackQueryHandler(onb_timezone_custom_pick, pattern=r"^tzother:"),
+                CallbackQueryHandler(onb_timezone_confirm_save, pattern=r"^onb:tz_save$"),
+                CallbackQueryHandler(onb_timezone_confirm_edit, pattern=r"^onb:tz_edit$"),
             ],
             ONB_REFLECTION_CONFIRM: [
                 CallbackQueryHandler(onb_reflection_save, pattern=r"^onb:save$"),
                 CallbackQueryHandler(onb_reflection_edit, pattern=r"^onb:edit$"),
                 CallbackQueryHandler(onb_reflection_back_to_prompt, pattern=r"^onb:back_to_prompt$"),
+                # Serverless safety: if state persistence lags, still accept timezone callbacks.
+                CallbackQueryHandler(onb_timezone_pick, pattern=r"^tz:"),
+                CallbackQueryHandler(onb_timezone_custom_pick, pattern=r"^tzother:"),
+                CallbackQueryHandler(onb_timezone_confirm_save, pattern=r"^onb:tz_save$"),
+                CallbackQueryHandler(onb_timezone_confirm_edit, pattern=r"^onb:tz_edit$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, onb_wrong_reflection_confirm),
             ],
             ONB_TIMEZONE: [
