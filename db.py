@@ -345,6 +345,7 @@ def get_admin_stats(db_path: str) -> dict[str, Any]:
                 SELECT
                     COUNT(*) AS users_total,
                     SUM(CASE WHEN onboarding_complete = 1 THEN 1 ELSE 0 END) AS users_onboarded,
+                    SUM(CASE WHEN onboarding_complete = 1 AND reflection_skipped = 0 THEN 1 ELSE 0 END) AS users_with_reflection,
                     SUM(CASE WHEN paused = 1 THEN 1 ELSE 0 END) AS users_paused
                 FROM users
                 """,
@@ -387,6 +388,7 @@ def get_admin_stats(db_path: str) -> dict[str, Any]:
     return {
         "users_total": int(users["users_total"] or 0),
         "users_onboarded": int(users["users_onboarded"] or 0),
+        "users_with_reflection": int(users["users_with_reflection"] or 0),
         "users_paused": int(users["users_paused"] or 0),
         "days_total": int(days["days_total"] or 0),
         "days_full": int(days["days_full"] or 0),
