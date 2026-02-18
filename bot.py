@@ -707,6 +707,36 @@ async def onb_wrong_timezone_confirm(update: Update, context: ContextTypes.DEFAU
     return await send_timezone_confirm_step(update.message, label)
 
 
+async def onb_stale_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recover onboarding flow if callback arrived while conversation state is stale."""
+    query = update.callback_query
+    data = query.data or ""
+
+    if data == "onb:start":
+        return await onb_start_click(update, context)
+    if data == "onb:skip":
+        return await onb_reflection_skip(update, context)
+    if data == "onb:save":
+        return await onb_reflection_save(update, context)
+    if data == "onb:edit":
+        return await onb_reflection_edit(update, context)
+    if data == "onb:back_to_prompt":
+        return await onb_reflection_back_to_prompt(update, context)
+    if data == "onb:back_to_welcome":
+        return await onb_reflection_back_to_welcome(update, context)
+    if data.startswith("tz:"):
+        return await onb_timezone_pick(update, context)
+    if data.startswith("tzother:"):
+        return await onb_timezone_custom_pick(update, context)
+    if data == "onb:tz_save":
+        return await onb_timezone_confirm_save(update, context)
+    if data == "onb:tz_edit":
+        return await onb_timezone_confirm_edit(update, context)
+
+    await query.answer()
+    return ConversationHandler.END
+
+
 async def change_time_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     rows = [
         [COPY["buttons"]["change_morning"]],
@@ -1385,6 +1415,7 @@ def build_app(token: str) -> Application:
         fallbacks=[
             CommandHandler("start", start_cmd),
             CommandHandler("restart_onboarding", restart_onboarding_cmd),
+            CallbackQueryHandler(onb_stale_callback_router, pattern=r"^(onb:|tz:|tzother:)"),
         ],
         per_chat=True,
         per_user=True,
