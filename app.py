@@ -35,7 +35,6 @@ def _ensure_tg_app():
             db.init_db(DB_PATH)
             _TG_APP = build_app(token)
             _LOOP.run_until_complete(_TG_APP.initialize())
-            _LOOP.run_until_complete(_TG_APP.start())
     return _TG_APP
 
 
@@ -66,14 +65,26 @@ def telegram_webhook():
     if not _check_telegram_secret():
         return jsonify({"ok": False, "error": "forbidden"}), 403
 
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify({"ok": False, "error": "bad json"}), 400
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"ok": False, "error": "bad json"}), 400
 
-    tg_app = _ensure_tg_app()
-    update = Update.de_json(payload, tg_app.bot)
-    _run(tg_app.process_update(update))
-    return jsonify({"ok": True})
+        tg_app = _ensure_tg_app()
+        update = Update.de_json(payload, tg_app.bot)
+        _run(tg_app.process_update(update))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": type(e).__name__,
+                    "message": str(e),
+                }
+            ),
+            500,
+        )
 
 
 @app.get("/api/cron/tick")

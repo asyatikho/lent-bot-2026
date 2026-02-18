@@ -34,7 +34,6 @@ def _ensure_app():
             db.init_db(DB_PATH)
             _TG_APP = build_app(token)
             _LOOP.run_until_complete(_TG_APP.initialize())
-            _LOOP.run_until_complete(_TG_APP.start())
     return _TG_APP
 
 
