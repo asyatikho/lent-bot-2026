@@ -246,6 +246,9 @@
   },
   "admin": {
     "forbidden": "Эта команда доступна только администратору.",
-    "stats": "Админ-статистика:\n\nПользователи всего: {users_total}\nПрошли онбординг: {users_onboarded}\nСейчас на паузе: {users_paused}\n\nДней с отметкой: {days_total}\nПрактика состоялась: {days_full}\nС небольшими отступлениями: {days_partial}\nСегодня без практики: {days_none}\nБез отметки: {days_unmarked}"
+    "stats": "Админ-статистика:\n\nПользователи всего: {users_total}\nПрошли онбординг: {users_onboarded}\nСейчас на паузе: {users_paused}\n\nДней с отметкой: {days_total}\nПрактика состоялась: {days_full}\nС небольшими отступлениями: {days_partial}\nСегодня без практики: {days_none}\nБез отметки: {days_unmarked}\n\n{marks_distribution_block}",
+    "marks_distribution_title": "Распределение по количеству отметок:",
+    "marks_distribution_line": "{marks_count} раз: {users_count}",
+    "marks_distribution_empty": "Распределение по количеству отметок:\nПока нет данных."
   }
 }

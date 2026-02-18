@@ -336,7 +336,7 @@ def get_stats(db_path: str, user_id: int) -> dict[str, int]:
     }
 
 
-def get_admin_stats(db_path: str) -> dict[str, int]:
+def get_admin_stats(db_path: str) -> dict[str, Any]:
     with get_conn(db_path) as conn:
         users = conn.execute(
             _sql(
@@ -364,6 +364,26 @@ def get_admin_stats(db_path: str) -> dict[str, int]:
                 """,
             )
         ).fetchone()
+        distribution_rows = conn.execute(
+            _sql(
+                db_path,
+                """
+                SELECT marks_count, COUNT(*) AS users_count
+                FROM (
+                    SELECT
+                        u.user_id,
+                        SUM(CASE WHEN d.status IN ('full', 'partial', 'none') THEN 1 ELSE 0 END) AS marks_count
+                    FROM users u
+                    LEFT JOIN days d ON d.user_id = u.user_id
+                    WHERE u.onboarding_complete = 1
+                    GROUP BY u.user_id
+                ) s
+                WHERE marks_count BETWEEN 1 AND 46
+                GROUP BY marks_count
+                ORDER BY marks_count
+                """,
+            )
+        ).fetchall()
     return {
         "users_total": int(users["users_total"] or 0),
         "users_onboarded": int(users["users_onboarded"] or 0),
@@ -373,6 +393,13 @@ def get_admin_stats(db_path: str) -> dict[str, int]:
         "days_partial": int(days["days_partial"] or 0),
         "days_none": int(days["days_none"] or 0),
         "days_unmarked": int(days["days_unmarked"] or 0),
+        "marks_distribution": [
+            {
+                "marks_count": int(r["marks_count"] or 0),
+                "users_count": int(r["users_count"] or 0),
+            }
+            for r in distribution_rows
+        ],
     }
 
 

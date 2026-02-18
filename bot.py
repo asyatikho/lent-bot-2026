@@ -419,6 +419,25 @@ async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(COPY["admin"]["forbidden"])
         return
     stats = db.get_admin_stats(DB_PATH)
+    distribution = stats.get("marks_distribution", [])
+    if distribution:
+        lines = [
+            COPY["admin"]["marks_distribution_line"].format(
+                marks_count=row["marks_count"],
+                users_count=row["users_count"],
+            )
+            for row in distribution
+            if int(row.get("users_count", 0)) > 0
+        ]
+        if lines:
+            marks_distribution_block = (
+                f"{COPY['admin']['marks_distribution_title']}\n" + "\n".join(lines)
+            )
+        else:
+            marks_distribution_block = COPY["admin"]["marks_distribution_empty"]
+    else:
+        marks_distribution_block = COPY["admin"]["marks_distribution_empty"]
+    stats["marks_distribution_block"] = marks_distribution_block
     await update.message.reply_text(COPY["admin"]["stats"].format(**stats))
 
 
