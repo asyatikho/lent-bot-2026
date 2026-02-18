@@ -422,6 +422,17 @@ async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(COPY["admin"]["stats"].format(**stats))
 
 
+async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = db.get_user(DB_PATH, update.effective_user.id)
+    if user and int(user.get("onboarding_complete", 0)) == 1:
+        await update.message.reply_text(
+            COPY["common"]["unknown_text"],
+            reply_markup=menu_markup_for_user(user),
+        )
+        return
+    await update.message.reply_text(COPY["common"]["unknown_text"])
+
+
 async def onb_start_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1400,6 +1411,7 @@ def build_app(token: str) -> Application:
     app.add_handler(CallbackQueryHandler(thanks_callback, pattern=r"^presence:thanks$"))
     app.add_handler(CallbackQueryHandler(final_thanks_callback, pattern=r"^final:thanks$"))
     app.add_handler(CallbackQueryHandler(test_final_thanks_callback, pattern=r"^test:final:thanks$"))
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, evening_status_handler))
 
     return app
